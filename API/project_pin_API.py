@@ -1,12 +1,16 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 import uvicorn
-from json import dumps
+import json
 from kafka import KafkaProducer
 
 app = FastAPI()
 
-
+producer = KafkaProducer(
+    bootstrap_servers = "localhost:9092",
+    value_serializer = lambda x: json.dumps(x).encode("utf-8"),
+    api_version =(0,10)
+)
 
 class Data(BaseModel):
     category: str
@@ -25,7 +29,8 @@ class Data(BaseModel):
 @app.post("/pin/")
 def get_db_row(item: Data):
     data = dict(item)
-    return item
+    producer.send("pinterestPosts", value = data)
+    producer.flush()
 
 
 if __name__ == '__main__':
