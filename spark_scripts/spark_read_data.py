@@ -54,22 +54,11 @@ org.apache.hadoop:hadoop-aws:3.3.1 pyspark-shell"
         # access the list of obeject directories
         df = self.spark.read.option('multiline','true').json(self.retrieved_objects_dir_list)
         df.show(1,True)
+        return(df)
 
     # clean data by: 
     # 1. converting tag_list from str to array
     # 2. converting follower_count from str to int
-
-    '''# Function to replace '4k' with 4000 or 4M with 4000000
-    def replace_k_or_M(number):
-        if 'k' in number or 'M' in number:
-            number = number.replace('k','000').replace('M','000000')
-        new_number = int(number)
-        return(new_number)
-    
-    def udf_conversion(replace_k_or_M):
-        # Convert function so that it can be applied on pyspark column
-        replace_k_or_M_udf = udf(lambda z: replace_k_or_M(z))
-        return(replace_k_or_M_udf)'''
 
     def udf_conversion(replace_k_or_M):
         def replace_k_or_M(number):
@@ -80,25 +69,22 @@ org.apache.hadoop:hadoop-aws:3.3.1 pyspark-shell"
         replace_k_or_M_udf = udf(lambda new_number: replace_k_or_M(new_number))
         return(replace_k_or_M_udf)
     
-    def spark_clean(self):
+    def spark_read_clean(self):
         udf_func = self.udf_conversion()
-        df = self.spark.read.option('multiline','true').json(self.retrieved_objects_dir_list)
-        df.show(vertical=True)
+        df = self.spark_read()
         # Implement both functions with cast schema for follower_count
         df2 = df.withColumn('tag_list',array_sort(split(col('tag_list'),',')))\
         .withColumn('follower_count',udf_func(col('follower_count')).cast('int'))
         df2.show(vertical=True)
 
-
-def spark_job():
-    spark = Spark_Clean()
-    spark.retrieve_object_dir()
-    spark.spark_clean()
-
+    def spark_job(self):
+        self.retrieve_object_dir()
+        self.spark_read_clean()
 
 
 if __name__ == "__main__":
-    spark_job()
+    job = Spark_Clean()
+    job.spark_job()
 
 
 

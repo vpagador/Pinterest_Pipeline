@@ -6,8 +6,9 @@ import sys
 
 sys.path.insert(0, "/home/van28/Desktop/AiCore/Pinterest_Project/Project/Pinterest_Pipeline/spark_scripts")
 
-import spark_read_data
+from spark_scripts.spark_read_data import Spark_Clean
 
+job = Spark_Clean()
 
 default_args = {
     'owner': 'Vander',
@@ -30,8 +31,5 @@ with DAG(dag_id='spark_dag',
     # Define the tasks. Here we are going to define only one bash operator
     spark_read_data = PythonOperator(
         task_id = 'spark_read_data',
-        python_callable= spark_read_data,
+        python_callable= job.spark_job,
         dag=dag)
-    
-    
-    spark_read_data
