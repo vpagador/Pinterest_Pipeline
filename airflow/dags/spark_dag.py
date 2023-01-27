@@ -2,10 +2,6 @@ from airflow.models import DAG
 from datetime import datetime
 from datetime import timedelta
 from airflow.operators.python import PythonOperator
-import sys
-
-sys.path.insert(0, "/home/van28/Desktop/AiCore/Pinterest_Project/Project/Pinterest_Pipeline/spark_scripts")
-
 from spark_scripts.spark_read_data import Spark_Clean
 
 job = Spark_Clean()
