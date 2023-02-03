@@ -1,10 +1,10 @@
 from airflow.models import DAG
 from datetime import datetime
-from datetime import timedelta
 from airflow.operators.python import PythonOperator
 from spark_scripts.spark_read_data import Spark_Clean
 
-job = Spark_Clean()
+job = Spark_Clean() 
+
 
 default_args = {
     'owner': 'Vander',
@@ -13,19 +13,18 @@ default_args = {
     'email_on_failure': False,
     'email_on_retry': False,
     'retries': 1,
-    'start_date': datetime(2021, 1, 24),
-    'retry_delay': timedelta(minutes=5),
-    'end_date': datetime(2021, 1, 24),
+    'start_date': datetime(2021, 1, 1),
 }
 
 with DAG(dag_id='spark_dag',
          default_args=default_args,
-         schedule_interval='@hourly',
+         schedule_interval='@daily',
          catchup=False,
-         tags=['test']
          ) as dag:
-    # Define the tasks. Here we are going to define only one bash operator
+    # Python Operator calls the spark clean job
     spark_read_data = PythonOperator(
         task_id = 'spark_read_data',
         python_callable= job.spark_job,
-        dag=dag)
+        dag=dag
+    )
+
