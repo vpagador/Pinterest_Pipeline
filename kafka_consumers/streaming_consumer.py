@@ -1,6 +1,7 @@
 from pyspark.sql import SparkSession
-from pyspark.sql.types import StructType, StructField, StringType, IntegerType, BooleanType, MapType, ArrayType
-from pyspark.sql.functions import col ,json_tuple, udf, array_sort, split
+from pyspark.sql.types import TimestampType
+from pyspark.sql.functions import col ,json_tuple, udf, array_sort, split, window, count
+import datetime
 import json
 import os
 
@@ -18,23 +19,7 @@ class Spark_stream:
 
         # Display error messages
         self.spark.sparkContext.setLogLevel('ERROR')
-            
-        # Set schema for columns
-        self.schema = StructType([
-            StructField('category',StringType(),True),
-            StructField('index',IntegerType(),True),
-            StructField('unique_id',StringType(),True),
-            StructField('title',StringType(),True),
-            StructField('description',StringType(),True),
-            StructField('follower_count',StringType(),True),
-            StructField('tag_list',StringType(),True),
-            StructField('is_image_or_video',StringType(),True),
-            StructField('image_src',StringType(),True),
-            StructField('downloaded',BooleanType(),True),
-            StructField('save_location',StringType(),True)
-        ])
         
-
     def start_read_stream(self):
         # Read raw values from stream into pyspark dataframe
         stream_df = self.spark \
@@ -48,7 +33,8 @@ class Spark_stream:
 
     def read_stream_data_values(self, df):
         # Select the value part of the kafka message and cast it to a string
-        df = df[['value']].withColumn('value',col('value').cast('string'))
+        df = df.select('value','timestamp')
+        df = df.withColumn('value',col('value').cast('string'))
         return(df)
     
     # clean data by: 
@@ -56,51 +42,64 @@ class Spark_stream:
     # 2. converting follower_count from str to int
     def udf_conversion(replace_k_or_M):
         def replace_k_or_M(number):
-            if 'k' in number or 'M' in number:
-                number = number.replace('k','000').replace('M','000000')
-            new_number = int(number)
-            return(new_number)
-        replace_k_or_M_udf = udf(lambda new_number: replace_k_or_M(new_number))
+            if 'User Info Error' in number:
+                number = 0
+            elif 'k' in number or 'M' in number:
+                number = number.replace('k','000').replace('M','000000')  
+            return(int(number))
+        replace_k_or_M_udf = udf(lambda number: replace_k_or_M(number))
         return(replace_k_or_M_udf)
     
     def clean_stream_data(self, df):
         # Apply data cleaning:
         df2 = df.select(json_tuple(col('value'),'category','index','unique_id','title','description','follower_count',
-        'tag_list','is_image_or_video','image_src','downloaded','save_location')) \
+        'tag_list','is_image_or_video','image_src'),'timestamp') \
         .toDF('category','index','unique_id','title','description','follower_count',
-        'tag_list','is_image_or_video','image_src','downloaded','save_location')
+        'tag_list','is_image_or_video','image_src','timestamp')
 
         # Apply cleaning functions and change schema
         udf_func = self.udf_conversion()
         # Implement both functions with cast schema for follower_count
         df2 = df2.withColumn('tag_list',array_sort(split(col('tag_list'),','))) \
-        .withColumn('follower_count',udf_func(col('follower_count')))
+        .withColumn('follower_count',udf_func(col('follower_count')).cast('int'))
         return(df2)
     
-    def process_batch_aggregations():
+    def process_window_aggregations(self, df):
         # Define aggregation functions to category, follower count and sort by either.
-        pass
+        df = df.groupBy(window(col('timestamp'), '10 minutes'),'category','follower_count') \
+            .agg(count('category')) \
+            .select("window.start","window.end","category","count(category)",'follower_count')
+        return(df)
     
     def write_stream_to_console(self):
         # Write messages to local directory
         stream_df = self.start_read_stream()
         stream_df = self.read_stream_data_values(stream_df)
-        stream_df = self.clean_stream_data(stream_df)  
+        stream_df = self.clean_stream_data(stream_df)
         stream_df = stream_df.writeStream \
             .format('console') \
             .outputMode('append') \
-            .option('truncate', 'true') \
+            .option('truncate', 'false') \
             .start() \
             .awaitTermination()
     
+    
     def write_stream_with_aggregations(self):
         # Apply aggregation function to write stream
-        pass
-    
-    def stream_clean_data(self):
+        # Write messages to local directory
         stream_df = self.start_read_stream()
-        
+        stream_df = self.read_stream_data_values(stream_df)
+        stream_df = self.clean_stream_data(stream_df)
+        stream_df = self.process_window_aggregations(stream_df)
+        stream_df = stream_df.writeStream \
+            .format('console') \
+            .outputMode('update') \
+            .option('truncate', 'false') \
+            .start() \
+            .awaitTermination() \
+
 
 if __name__ == '__main__':
     stream = Spark_stream()
-    stream.write_stream_to_console()
+    stream.write_stream_with_aggregations()
+    '''stream.write_stream_to_console()'''

@@ -63,9 +63,8 @@ org.apache.hadoop:hadoop-aws:3.3.1 pyspark-shell"
     def udf_conversion(replace_k_or_M):
         def replace_k_or_M(number):
             if 'k' in number or 'M' in number:
-                number = number.replace('k','000').replace('M','000000')
-            new_number = int(number)
-            return(new_number)
+                new_number = number.replace('k','000').replace('M','000000')
+                return(new_number)
         replace_k_or_M_udf = udf(lambda new_number: replace_k_or_M(new_number))
         return(replace_k_or_M_udf)
     
