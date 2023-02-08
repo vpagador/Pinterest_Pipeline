@@ -1,21 +1,22 @@
 from pyspark.sql import SparkSession
-from pyspark.sql.types import TimestampType
 from pyspark.sql.functions import col ,json_tuple, udf, array_sort, split, window, count
-import datetime
-import json
+from pyspark.sql import DataFrameWriter
 import os
 
 class Spark_stream:
 
     def __init__(self):
         # Submit spark sql kafka package from Maven repo to pyspark
-        os.environ['PYSPARK_SUBMIT_ARGS'] = '--packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.1 streaming_consumer.py pyspark-shell'
+        os.environ['PYSPARK_SUBMIT_ARGS'] = '--packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.1 streaming_consumer.py pyspark-shell\
+        ,org.postgresql:postgresql:42.5.2 pyspark-shell'
         # Specify kafka topic to stream data from
         self.kafka_topic = 'pinterestPosts'
         # Specify your kafka server to read from
         self.kafka_bootstrap_servers = 'localhost:9092'
 
-        self.spark = SparkSession.builder.appName("kafkaStreaming").getOrCreate()
+        self.spark = SparkSession.builder\
+            .appName("kafkaStreaming")\
+            .getOrCreate()
 
         # Display error messages
         self.spark.sparkContext.setLogLevel('ERROR')
@@ -66,9 +67,10 @@ class Spark_stream:
     
     def process_window_aggregations(self, df):
         # Define aggregation functions to category, follower count and sort by either.
-        df = df.groupBy(window(col('timestamp'), '10 minutes'),'category','follower_count') \
+        df = df.withWatermark("timestamp", "30 minutes") \
+            .groupBy(window(col('timestamp'), '30 minutes'),'category') \
             .agg(count('category')) \
-            .select("window.start","window.end","category","count(category)",'follower_count')
+            .select("window.start","window.end","category","count(category)")
         return(df)
     
     def write_stream_to_console(self):
@@ -82,7 +84,6 @@ class Spark_stream:
             .option('truncate', 'false') \
             .start() \
             .awaitTermination()
-    
     
     def write_stream_with_aggregations(self):
         # Apply aggregation function to write stream
@@ -98,8 +99,31 @@ class Spark_stream:
             .start() \
             .awaitTermination() \
 
+    def write_to_sql(self, df, epoch_id):
+        server_name = "jdbc:postgresql://localhost:5432/pinterest_streaming"
+        database_name = "pinterest_streaming"
+        jdbcurl = server_name + "/" + database_name
+        table_name = "experimental_data"
+        db_properties = {"user":"postgres", "password":"Mapletele02"}
+
+        dfwriter = df.write.mode("append") 
+        dfwriter.jdbc(url=jdbcurl, table=table_name, properties=db_properties) 
+    
+    def write_stream_to_database(self):
+        stream_df = self.start_read_stream()
+        stream_df = self.read_stream_data_values(stream_df)
+        stream_df = self.clean_stream_data(stream_df)
+        stream_df = self.process_window_aggregations(stream_df)
+        query = stream_df.writeStream. \
+        outputMode("update") \
+        .foreachBatch(self.write_to_sql) \
+        .start() 
+        
+        query.awaitTermination()
+
 
 if __name__ == '__main__':
     stream = Spark_stream()
-    stream.write_stream_with_aggregations()
-    '''stream.write_stream_to_console()'''
+    '''stream.write_stream_with_aggregations()
+    stream.write_stream_to_console()'''
+    stream.write_stream_to_database()
