@@ -1,14 +1,13 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col ,json_tuple, udf, array_sort, split, window, count
-from pyspark.sql import DataFrameWriter
 import os
 
 class Spark_stream:
 
     def __init__(self):
         # Submit spark sql kafka package from Maven repo to pyspark
-        os.environ['PYSPARK_SUBMIT_ARGS'] = '--packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.1 streaming_consumer.py pyspark-shell\
-        ,org.postgresql:postgresql:42.5.2 pyspark-shell'
+        os.environ['PYSPARK_SUBMIT_ARGS'] = '--packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.1\
+,org.postgresql:postgresql:42.5.2 streaming_consumer.py pyspark-shell'
         # Specify kafka topic to stream data from
         self.kafka_topic = 'pinterestPosts'
         # Specify your kafka server to read from
@@ -100,14 +99,15 @@ class Spark_stream:
             .awaitTermination() \
 
     def write_to_sql(self, df, epoch_id):
-        server_name = "jdbc:postgresql://localhost:5432/pinterest_streaming"
-        database_name = "pinterest_streaming"
-        jdbcurl = server_name + "/" + database_name
-        table_name = "experimental_data"
-        db_properties = {"user":"postgres", "password":"Mapletele02"}
-
-        dfwriter = df.write.mode("append") 
-        dfwriter.jdbc(url=jdbcurl, table=table_name, properties=db_properties) 
+        df.write.mode('append') \
+            .format('jdbc') \
+            .option('url', 'jdbc:postgresql://localhost:5432/pinterest_streaming') \
+            .option("driver", "org.postgresql.Driver") \
+            .option("dbtable", "experimental_data") \
+            .option("user","postgres")\
+            .option("password", "Mapletele02") \
+            .save()
+            
     
     def write_stream_to_database(self):
         stream_df = self.start_read_stream()
@@ -124,6 +124,4 @@ class Spark_stream:
 
 if __name__ == '__main__':
     stream = Spark_stream()
-    '''stream.write_stream_with_aggregations()
-    stream.write_stream_to_console()'''
     stream.write_stream_to_database()
