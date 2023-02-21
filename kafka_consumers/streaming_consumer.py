@@ -105,7 +105,7 @@ class Spark_stream:
             .option("driver", "org.postgresql.Driver") \
             .option("dbtable", "experimental_data") \
             .option("user","postgres")\
-            .option("password", "Mapletele02") \
+            .option("password", "****") \
             .save()
             
     
